@@ -3,6 +3,8 @@ package avconv
 import (
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 	"time"
 	"github.com/nareix/joy4/av/avutil"
 	"github.com/nareix/joy4/av"
@@ -173,11 +175,22 @@ func ConvertCmdline(args []string) (err error) {
 	var demuxer av.DemuxCloser
 	var muxer av.MuxCloser
 
-	if demuxer, err = avutil.Open(input); err != nil {
-		return
+	if strings.HasPrefix(input, "rtsp://") {
+		rtsp.SkipErrRtpBlock = true
+		if demuxer, err = rtsp.DialTimeout(input, time.Second*50); err != nil {
+			return
+		}
+	} else {
+		input = filepath.Clean(input)
+
+		if demuxer, err = avutil.Open(input); err != nil {
+			return
+		}
 	}
+
 	defer demuxer.Close()
 
+	output = filepath.Clean(output)
 	var handler avutil.RegisterHandler
 	if handler, muxer, err = avutil.DefaultHandlers.FindCreate(output); err != nil {
 		return
@@ -252,4 +265,3 @@ func ConvertCmdline(args []string) (err error) {
 
 	return
 }
-

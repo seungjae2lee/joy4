@@ -54,18 +54,18 @@ func (self *HandlerMuxer) Close() (err error) {
 }
 
 type RegisterHandler struct {
-	Ext string
-	ReaderDemuxer func(io.Reader)av.Demuxer
-	WriterMuxer func(io.Writer)av.Muxer
-	UrlMuxer func(string)(bool,av.MuxCloser,error)
-	UrlDemuxer func(string)(bool,av.DemuxCloser,error)
-	UrlReader func(string)(bool,io.ReadCloser,error)
-	Probe func([]byte)bool
-	AudioEncoder func(av.CodecType)(av.AudioEncoder,error)
-	AudioDecoder func(av.AudioCodecData)(av.AudioDecoder,error)
-	ServerDemuxer func(string)(bool,av.DemuxCloser,error)
-	ServerMuxer func(string)(bool,av.MuxCloser,error)
-	CodecTypes []av.CodecType
+	Ext           string
+	ReaderDemuxer func(io.Reader) av.Demuxer
+	WriterMuxer   func(io.Writer) av.Muxer
+	UrlMuxer      func(string) (bool, av.MuxCloser, error)
+	UrlDemuxer    func(string) (bool, av.DemuxCloser, error)
+	UrlReader     func(string) (bool, io.ReadCloser, error)
+	Probe         func([]byte) bool
+	AudioEncoder  func(av.CodecType) (av.AudioEncoder, error)
+	AudioDecoder  func(av.AudioCodecData) (av.AudioDecoder, error)
+	ServerDemuxer func(string) (bool, av.DemuxCloser, error)
+	ServerMuxer   func(string) (bool, av.MuxCloser, error)
+	CodecTypes    []av.CodecType
 }
 
 type Handlers struct {
@@ -79,7 +79,10 @@ func (self *Handlers) Add(fn func(*RegisterHandler)) {
 }
 
 func (self *Handlers) openUrl(u *url.URL, uri string) (r io.ReadCloser, err error) {
-	if u != nil && u.Scheme != "" {
+	if u != nil && u.Scheme == "file" {
+		fmt.Println(filepath.Join(u.Host, u.Path))
+		r, err = os.Open(filepath.Join(u.Host, u.Path))
+	} else if u != nil && u.Scheme != "" {
 		for _, handler := range self.handlers {
 			if handler.UrlReader != nil {
 				var ok bool
@@ -96,7 +99,11 @@ func (self *Handlers) openUrl(u *url.URL, uri string) (r io.ReadCloser, err erro
 }
 
 func (self *Handlers) createUrl(u *url.URL, uri string) (w io.WriteCloser, err error) {
-	w, err = os.Create(uri)
+	if u != nil && u.Scheme == "file" {
+		w, err = os.Create(u.Path)
+	} else {
+		w, err = os.Create(uri)
+	}
 	return
 }
 
@@ -212,6 +219,11 @@ func (self *Handlers) Create(uri string) (muxer av.MuxCloser, err error) {
 	return
 }
 
+func (self *Handlers) Create2(uri string, writer io.WriteCloser) (muxer av.MuxCloser, err error) {
+	_, muxer, err = self.FindCreate2(uri, writer)
+	return
+}
+
 func (self *Handlers) FindCreate(uri string) (handler RegisterHandler, muxer av.MuxCloser, err error) {
 	listen := false
 	if strings.HasPrefix(uri, "listen:") {
@@ -254,7 +266,67 @@ func (self *Handlers) FindCreate(uri string) (handler RegisterHandler, muxer av.
 				}
 				muxer = &HandlerMuxer{
 					Muxer: handler.WriterMuxer(w),
-					w: w,
+					w:     w,
+				}
+				return
+			}
+		}
+	}
+
+	err = fmt.Errorf("avutil: create muxer %s failed", uri)
+	return
+}
+
+func (self *Handlers) FindCreate2(uri string, writer io.WriteCloser) (handler RegisterHandler, muxer av.MuxCloser, err error) {
+	listen := false
+	if strings.HasPrefix(uri, "listen:") {
+		uri = uri[len("listen:"):]
+		listen = true
+	}
+
+	for _, handler = range self.handlers {
+		if listen {
+			if handler.ServerMuxer != nil {
+				var ok bool
+				if ok, muxer, err = handler.ServerMuxer(uri); ok {
+					return
+				}
+			}
+		} else {
+			if handler.UrlMuxer != nil {
+				var ok bool
+				if ok, muxer, err = handler.UrlMuxer(uri); ok {
+					return
+				}
+			}
+		}
+	}
+
+	var ext string
+	var u *url.URL
+	if u, _ = url.Parse(uri); u != nil && u.Scheme != "" {
+		ext = path.Ext(u.Path)
+	} else {
+		ext = path.Ext(uri)
+	}
+
+	if ext != "" {
+		for _, handler = range self.handlers {
+			if handler.Ext == ext && handler.WriterMuxer != nil {
+				if writer == nil {
+					var w io.WriteCloser
+					if w, err = self.createUrl(u, uri); err != nil {
+						return
+					}
+					muxer = &HandlerMuxer{
+						Muxer: handler.WriterMuxer(w),
+						w:     w,
+					}
+				} else {
+					muxer = &HandlerMuxer{
+						Muxer: handler.WriterMuxer(writer),
+						w:     writer,
+					}
 				}
 				return
 			}
@@ -273,6 +345,10 @@ func Open(url string) (demuxer av.DemuxCloser, err error) {
 
 func Create(url string) (muxer av.MuxCloser, err error) {
 	return DefaultHandlers.Create(url)
+}
+
+func Create2(url string, writer io.WriteCloser) (muxer av.MuxCloser, err error) {
+	return DefaultHandlers.Create2(url, writer)
 }
 
 func CopyPackets(dst av.PacketWriter, src av.PacketReader) (err error) {

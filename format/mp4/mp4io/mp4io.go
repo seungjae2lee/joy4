@@ -495,6 +495,18 @@ func (self *Track) GetAVC1Conf() (conf *AVC1Conf) {
 	return
 }
 
+func (self *Track) GetHEV1Conf() (conf *HEV1Conf) {
+	atom := FindChildren(self, HVCC)
+	conf, _ = atom.(*HEV1Conf)
+	return
+}
+
+func (self *Track) GetElemStreamVDesc() (mp4v *MP4VDesc) {
+	atom := FindChildren(self, MP4V)
+	mp4v, _ = atom.(*MP4VDesc)
+	return
+}
+
 func (self *Track) GetElemStreamDesc() (esds *ElemStreamDesc) {
 	atom := FindChildren(self, ESDS)
 	esds, _ = atom.(*ElemStreamDesc)

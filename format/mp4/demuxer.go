@@ -317,6 +317,9 @@ func (self *Demuxer) ReadPacket() (pkt av.Packet, err error) {
 	if false {
 		fmt.Printf("ReadPacket: chosen index=%v time=%v\n", chosen.idx, chosen.tsToTime(chosen.dts))
 	}
+	if chosen.timeScale == 0 {
+		chosen.timeScale = int64(self.movieAtom.Header.TimeScale)
+	}
 	tm := chosen.tsToTime(chosen.dts)
 	if pkt, err = chosen.readPacket(); err != nil {
 		return
@@ -380,7 +383,26 @@ func (self *Stream) readPacket() (pkt av.Packet, err error) {
 	if self.sample.SyncSample != nil {
 		if self.sample.SyncSample.Entries[self.syncSampleIndex]-1 == uint32(self.sampleIndex) {
 			pkt.IsKeyFrame = true
+
+			if self.CodecData.Type() == av.H265 {
+				// for i, v := range pkt.Data {
+				// 	// trim nal size 00 00 00 xx
+				// 	if v == 0x40 && pkt.Data[i-2] == 0x0 && pkt.Data[i-3] == 0x0 && pkt.Data[i-4] == 0x0 {
+				// 		pkt.Data = append(pkt.Data[:i-4], pkt.Data[i:]...)
+				// 	} else if v == 0x42 && pkt.Data[i-2] == 0x0 && pkt.Data[i-3] == 0x0 && pkt.Data[i-4] == 0x0 {
+				// 		pkt.Data = append(pkt.Data[:i-4], pkt.Data[i:]...)
+				// 	} else if v == 0x44 && pkt.Data[i-2] == 0x0 && pkt.Data[i-3] == 0x0 && pkt.Data[i-4] == 0x0 {
+				// 		pkt.Data = append(pkt.Data[:i-4], pkt.Data[i:]...)
+				// 	}
+				// }
+
+				pkt.Data = append(pkt.Data[:0], pkt.Data[107:]...)
+			}
 		}
+	}
+
+	if self.CodecData.Type() == av.JPEG {
+		pkt.IsKeyFrame = true
 	}
 
 	//println("pts/dts", self.ptsEntryIndex, self.dtsEntryIndex)

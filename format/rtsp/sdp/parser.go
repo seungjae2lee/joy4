@@ -39,7 +39,7 @@ func Parse(content string) (sess Session, medias []Media) {
 			case "m":
 				if len(fields) > 0 {
 					switch fields[0] {
-					case "audio", "video":
+					case "audio", "video", "application":
 						medias = append(medias, Media{AVType: fields[0]})
 						media = &medias[len(medias)-1]
 						mfields := strings.Split(fields[1], " ")
@@ -74,6 +74,10 @@ func Parse(content string) (sess Session, medias []Media) {
 								media.Type = av.AAC
 							case "H264":
 								media.Type = av.H264
+							case "H265":
+								media.Type = av.H265
+							case "JPEG":
+								media.Type = av.JPEG
 							}
 							if i, err := strconv.Atoi(keyval[1]); err == nil {
 								media.TimeScale = i
@@ -102,6 +106,19 @@ func Parse(content string) (sess Session, medias []Media) {
 											val, _ := base64.StdEncoding.DecodeString(field)
 											media.SpropParameterSets = append(media.SpropParameterSets, val)
 										}
+									// H.265 profile set
+									case "sprop-vps":
+										fmt.Println("sprop-vps")
+										val, _ := base64.StdEncoding.DecodeString(val)
+										media.SpropParameterSets = append(media.SpropParameterSets, val)
+									case "sprop-sps":
+										fmt.Println("sprop-sps")
+										val, _ := base64.StdEncoding.DecodeString(val)
+										media.SpropParameterSets = append(media.SpropParameterSets, val)
+									case "sprop-pps":
+										fmt.Println("sprop-pps")
+										val, _ := base64.StdEncoding.DecodeString(val)
+										media.SpropParameterSets = append(media.SpropParameterSets, val)
 									}
 								}
 							}

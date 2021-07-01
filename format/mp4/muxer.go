@@ -28,7 +28,7 @@ func NewMuxer(w io.WriteSeeker) *Muxer {
 
 func (self *Muxer) newStream(codec av.CodecData) (err error) {
 	switch codec.Type() {
-	case av.H264, av.AAC:
+	case av.H264, av.H265, av.JPEG, av.AAC:
 
 	default:
 		err = fmt.Errorf("mp4: codec type=%v is not supported", codec.Type())
@@ -79,7 +79,7 @@ func (self *Muxer) newStream(codec av.CodecData) (err error) {
 	}
 
 	switch codec.Type() {
-	case av.H264:
+	case av.H264, av.H265, av.JPEG:
 		stream.sample.SyncSample = &mp4io.SyncSample{}
 	}
 
@@ -95,7 +95,7 @@ func (self *Stream) fillTrackAtom() (err error) {
 	self.trackAtom.Media.Header.Duration = int32(self.duration)
 
 	if self.Type() == av.H264 {
-		codec := self.CodecData.(h264parser.CodecData)
+		codec := self.CodecData.(codecparser.CodecData)
 		width, height := codec.Width(), codec.Height()
 		self.sample.SampleDesc.AVC1Desc = &mp4io.AVC1Desc{
 			DataRefIdx:           1,
@@ -106,7 +106,7 @@ func (self *Stream) fillTrackAtom() (err error) {
 			FrameCount:           1,
 			Depth:                24,
 			ColorTableId:         -1,
-			Conf:                 &mp4io.AVC1Conf{Data: codec.AVCDecoderConfRecordBytes()},
+			Conf:                 &mp4io.AVC1Conf{Data: codec.EAVCDecoderConfRecordBytes()},
 		}
 		self.trackAtom.Media.Handler = &mp4io.HandlerRefer{
 			SubType: [4]byte{'v','i','d','e'},
@@ -118,6 +118,78 @@ func (self *Stream) fillTrackAtom() (err error) {
 		self.trackAtom.Header.TrackWidth = float64(width)
 		self.trackAtom.Header.TrackHeight = float64(height)
 
+	} else if self.Type() == av.H265 {
+		codec := self.CodecData.(codecparser.CodecData)
+		width, height := codec.Width(), codec.Height()
+		self.sample.SampleDesc.HEV1Desc = &mp4io.HEV1Desc{
+			DataRefIdx:           1,
+			HorizontalResolution: 72,
+			VorizontalResolution: 72,
+			Width:                int16(width),
+			Height:               int16(height),
+			FrameCount:           1,
+			Depth:                24,
+			ColorTableId:         -1,
+			Conf:                 &mp4io.HEV1Conf{Data: codec.EAVCDecoderConfRecordBytes()},
+		}
+
+		self.trackAtom.Media.Handler = &mp4io.HandlerRefer{
+			SubType: [4]byte{'v', 'i', 'd', 'e'},
+			Name:    []byte("Video Media Handler"),
+		}
+		self.trackAtom.Media.Info.Video = &mp4io.VideoMediaInfo{
+			Flags: 0x000001,
+		}
+		self.trackAtom.Header.TrackWidth = float64(width)
+		self.trackAtom.Header.TrackHeight = float64(height)
+	} else if self.Type() == av.JPEG {
+		codec := self.CodecData.(codecparser.CodecData)
+		width, height := codec.Width(), codec.Height()
+		self.sample.SampleDesc.MP4VDesc = &mp4io.MP4VDesc{
+			DataRefIdx:           1,
+			HorizontalResolution: 4718592,
+			VorizontalResolution: 4718592,
+			Width:                int16(width),
+			Height:               int16(height),
+			Predefined1:          1,
+			Depth:                24,
+			ColorTableId:         -1,
+		}
+
+		self.sample.SampleDesc.MP4VDesc.ESDSVDesc = &mp4io.ESDSVDesc{
+			Version:          0,
+			Flags:            0,
+			Tag:              3,
+			TagSize:          27,
+			EsID:             1,
+			StreamDependFlag: 0,
+			DecodeTag:        4,
+			DecodeTagSize:    13,
+			StreamType:       0x6C,
+			UpStream:         0x11,
+			Reserved:         0,
+			BufferSize:       0,
+			MaxBitRate:       5933100, //0x005A882C
+			AvgBitRate:       5933100, //0x005A882C
+			SyncTag:          0x06,
+			SyncTagSize:      1,
+			PreDefined:       0x02,
+		}
+
+		self.sample.SampleDesc.MP4VDesc.PASPDesc = &mp4io.PASPDesc{
+			Numerator:   1,
+			Denominator: 1,
+		}
+
+		self.trackAtom.Media.Handler = &mp4io.HandlerRefer{
+			SubType: [4]byte{'v', 'i', 'd', 'e'},
+			Name:    []byte("Video Media Handler"),
+		}
+		self.trackAtom.Media.Info.Video = &mp4io.VideoMediaInfo{
+			Flags: 0x000001,
+		}
+		self.trackAtom.Header.TrackWidth = float64(width)
+		self.trackAtom.Header.TrackHeight = float64(height)
 	} else if self.Type() == av.AAC {
 		codec := self.CodecData.(aacparser.CodecData)
 		self.sample.SampleDesc.MP4ADesc = &mp4io.MP4ADesc{

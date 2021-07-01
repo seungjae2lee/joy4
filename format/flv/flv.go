@@ -86,8 +86,8 @@ func (self *Prober) PushTag(tag flvio.Tag, timestamp int32) (err error) {
 		switch tag.AVCPacketType {
 		case flvio.AVC_SEQHDR:
 			if !self.GotVideo {
-				var stream h264parser.CodecData
-				if stream, err = h264parser.NewCodecDataFromAVCDecoderConfRecord(tag.Data); err != nil {
+				var stream codecparser.CodecData
+				if stream, err = codecparser.NewCodecDataFromEAVCDecoderConfRecord(tag.Data); err != nil {
 					err = fmt.Errorf("flv: h264 seqhdr invalid")
 					return
 				}
@@ -211,12 +211,12 @@ func (self *Prober) PopPacket() av.Packet {
 func CodecDataToTag(stream av.CodecData) (_tag flvio.Tag, ok bool, err error) {
 	switch stream.Type() {
 	case av.H264:
-		h264 := stream.(h264parser.CodecData)
+		h264 := stream.(codecparser.CodecData)
 		tag := flvio.Tag{
 			Type:          flvio.TAG_VIDEO,
 			AVCPacketType: flvio.AVC_SEQHDR,
 			CodecID:       flvio.VIDEO_H264,
-			Data:          h264.AVCDecoderConfRecordBytes(),
+			Data:          h264.EAVCDecoderConfRecordBytes(),
 			FrameType:     flvio.FRAME_KEY,
 		}
 		ok = true
